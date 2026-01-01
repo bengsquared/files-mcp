@@ -3,6 +3,7 @@
 
 from mcp.server.fastmcp import FastMCP
 import sys
+from pathlib import Path
 from config import Config
 
 # Initialize MCP server and config
@@ -71,8 +72,10 @@ async def write_file(path: str, content: str) -> str:
     file_path = config.validate_path(path, require_write=True)
 
     # Check size limit
+    content_bytes = content.encode('utf-8')
+    size = len(content_bytes)
+
     if config.max_file_size_bytes:
-        size = len(content.encode('utf-8'))
         if size > config.max_file_size_bytes:
             max_mb = config.max_file_size_bytes / (1024 * 1024)
             size_mb = size / (1024 * 1024)
@@ -86,8 +89,7 @@ async def write_file(path: str, content: str) -> str:
     # Write file
     file_path.write_text(content)
 
-    byte_count = len(content.encode('utf-8'))
-    return f"Wrote {byte_count} bytes to {path}"
+    return f"Wrote {size} bytes to {path}"
 
 
 @mcp.tool()
@@ -156,7 +158,7 @@ async def list_directory_tree(path: str, max_depth: int = 3) -> str:
     # Clamp max_depth to reasonable limits
     max_depth = max(1, min(max_depth, 10))
 
-    def build_tree(current_path, current_depth):
+    def build_tree(current_path: Path, current_depth: int) -> dict:
         """Recursively build directory tree."""
         if current_depth > max_depth:
             return {
@@ -173,6 +175,8 @@ async def list_directory_tree(path: str, max_depth: int = 3) -> str:
 
         try:
             for item in sorted(current_path.iterdir()):
+                if item.is_symlink():
+                    continue  # Skip symlinks to prevent traversal issues
                 if item.is_dir():
                     result["children"].append(build_tree(item, current_depth + 1))
                 else:
