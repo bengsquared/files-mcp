@@ -71,17 +71,38 @@ class Config:
 
         Args:
             path_str: Path to validate (absolute or relative)
-            require_write: If True, require write permission
+            require_write: If True, require write permission (path need not exist)
+                           If False, path must exist for read operations
 
         Returns:
             Resolved absolute Path object
 
         Raises:
             PermissionError: Path outside allowed dirs or insufficient permissions
-            FileNotFoundError: Path doesn't exist (only if require_write=False)
+            FileNotFoundError: Path doesn't exist (when require_write=False)
         """
         # Resolve to absolute path, following symlinks
-        requested = Path(path_str).expanduser().resolve()
+        path_obj = Path(path_str).expanduser()
+
+        # For read operations, path must exist to resolve symlinks properly
+        # For write operations, parent must be within bounds (file may not exist yet)
+        if require_write:
+            # Writing - resolve what we can, validate parent directory bounds
+            if path_obj.exists():
+                requested = path_obj.resolve()
+            else:
+                # Non-existent file - resolve parent and append filename
+                # This ensures we catch symlink escapes in the directory path
+                if path_obj.parent.exists():
+                    requested = path_obj.parent.resolve() / path_obj.name
+                else:
+                    # Parent doesn't exist either - resolve as far as we can
+                    requested = path_obj.resolve()
+        else:
+            # Reading - path must exist
+            if not path_obj.exists():
+                raise FileNotFoundError(f"Path not found: {path_str}")
+            requested = path_obj.resolve()
 
         # Find which allowed directory contains this path
         for allowed_dir, permission in self.allowed_paths.items():
@@ -104,5 +125,6 @@ class Config:
 
         # No allowed directory matched
         raise PermissionError(
-            f"Access denied: {requested} is outside allowed directories"
+            f"Access denied: '{path_str}' resolves to '{requested}' "
+            f"which is outside allowed directories"
         )
