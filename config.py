@@ -27,6 +27,7 @@ class Config:
             if ":" not in entry:
                 raise ValueError(f"Invalid entry (missing :permission): {entry}")
 
+            # Use rsplit to split from right, handling paths that might contain colons (e.g., C:\path on Windows)
             path_str, permission = entry.rsplit(":", 1)
 
             if permission not in ["ro", "rw"]:
@@ -38,6 +39,9 @@ class Config:
                 raise ValueError(f"Path does not exist: {path}")
             if not path.is_dir():
                 raise ValueError(f"Path is not a directory: {path}")
+
+            if path in self.allowed_paths:
+                raise ValueError(f"Duplicate path in ALLOWED_PATHS: {path}")
 
             self.allowed_paths[path] = permission
 
@@ -51,5 +55,13 @@ class Config:
         if self.no_size_limit:
             self.max_file_size_bytes = None
         else:
-            max_mb = int(os.getenv("MAX_FILE_SIZE_MB", "10"))
+            max_mb_str = os.getenv("MAX_FILE_SIZE_MB", "10")
+            try:
+                max_mb = int(max_mb_str)
+            except ValueError:
+                raise ValueError(f"MAX_FILE_SIZE_MB must be numeric, got: {max_mb_str}")
+
+            if max_mb <= 0:
+                raise ValueError(f"MAX_FILE_SIZE_MB must be positive, got: {max_mb}")
+
             self.max_file_size_bytes = max_mb * 1024 * 1024
