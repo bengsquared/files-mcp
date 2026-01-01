@@ -2,7 +2,6 @@
 """Filesystem MCP Server - provides filesystem access to Claude Desktop."""
 
 from mcp.server.fastmcp import FastMCP
-from pathlib import Path
 import sys
 from config import Config
 
@@ -23,7 +22,7 @@ async def read_file(path: str) -> str:
     Raises:
         PermissionError: Path outside allowed directories
         FileNotFoundError: File doesn't exist
-        ValueError: File too large
+        ValueError: File too large or binary file
     """
     # Validate path is within allowed directories
     file_path = config.validate_path(path, require_write=False)
@@ -45,7 +44,10 @@ async def read_file(path: str) -> str:
             )
 
     # Read and return file contents
-    return file_path.read_text()
+    try:
+        return file_path.read_text()
+    except UnicodeDecodeError:
+        raise ValueError(f"Cannot read binary file: {path}. Only text files supported.")
 
 
 if __name__ == "__main__":
