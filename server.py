@@ -11,6 +11,29 @@ mcp = FastMCP("filesystem")
 config = Config()
 
 @mcp.tool()
+async def get_allowed_paths() -> str:
+    """Get list of directories accessible to this MCP server.
+
+    Returns:
+        JSON object with home directory and allowed paths with permissions
+    """
+    import json
+    import os
+
+    result = {
+        "home": str(Path.home()),
+        "allowed_paths": []
+    }
+
+    for path, permission in config.allowed_paths.items():
+        result["allowed_paths"].append({
+            "path": str(path),
+            "permission": "read-write" if permission == "rw" else "read-only"
+        })
+
+    return json.dumps(result, indent=2)
+
+@mcp.tool()
 async def read_file(path: str) -> str:
     """Read file contents from allowed directories.
 
@@ -191,6 +214,57 @@ async def list_directory_tree(path: str, max_depth: int = 3) -> str:
 
     tree = build_tree(dir_path, 0)
     return json.dumps(tree, indent=2)
+
+@mcp.tool()
+async def search_directories(name: str, max_depth: int = 3) -> str:
+    """Search for directories by name within allowed paths.
+
+    Args:
+        name: Directory name to search for (case-insensitive substring match)
+        max_depth: Maximum depth to search (default 3, max 5)
+
+    Returns:
+        JSON array of matching directory paths
+
+    Raises:
+        PermissionError: If allowed paths not configured
+    """
+    import json
+
+    if not config.allowed_paths:
+        raise PermissionError("No allowed paths configured")
+
+    # Clamp depth
+    max_depth = max(1, min(max_depth, 5))
+    matches = []
+    name_lower = name.lower()
+
+    def search_recursive(current_path: Path, depth: int):
+        """Recursively search for matching directories."""
+        if depth > max_depth:
+            return
+
+        try:
+            for item in current_path.iterdir():
+                if item.is_symlink():
+                    continue
+
+                if item.is_dir():
+                    # Check if name matches
+                    if name_lower in item.name.lower():
+                        matches.append(str(item))
+
+                    # Recurse into subdirectory
+                    if depth < max_depth:
+                        search_recursive(item, depth + 1)
+        except PermissionError:
+            pass  # Skip directories we can't read
+
+    # Search within each allowed directory
+    for allowed_path in config.allowed_paths.keys():
+        search_recursive(allowed_path, 0)
+
+    return json.dumps({"matches": matches, "count": len(matches)}, indent=2)
 
 
 if __name__ == "__main__":

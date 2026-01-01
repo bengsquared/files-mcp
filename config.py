@@ -123,8 +123,10 @@ class Config:
                 # Not relative to this allowed_dir, try next
                 continue
 
-        # No allowed directory matched
+        # No allowed directory matched - provide helpful hint
+        allowed_list = ", ".join(str(p) for p in self.allowed_paths.keys())
         raise PermissionError(
             f"Access denied: '{path_str}' resolves to '{requested}' "
-            f"which is outside allowed directories"
+            f"which is outside allowed directories. "
+            f"Allowed paths: {allowed_list}"
         )
