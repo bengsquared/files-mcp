@@ -65,3 +65,44 @@ class Config:
                 raise ValueError(f"MAX_FILE_SIZE_MB must be positive, got: {max_mb}")
 
             self.max_file_size_bytes = max_mb * 1024 * 1024
+
+    def validate_path(self, path_str: str, require_write: bool = False) -> Path:
+        """Validate path is within allowed directories with correct permissions.
+
+        Args:
+            path_str: Path to validate (absolute or relative)
+            require_write: If True, require write permission
+
+        Returns:
+            Resolved absolute Path object
+
+        Raises:
+            PermissionError: Path outside allowed dirs or insufficient permissions
+            FileNotFoundError: Path doesn't exist (only if require_write=False)
+        """
+        # Resolve to absolute path, following symlinks
+        requested = Path(path_str).expanduser().resolve()
+
+        # Find which allowed directory contains this path
+        for allowed_dir, permission in self.allowed_paths.items():
+            try:
+                # Check if requested path is within allowed_dir
+                requested.relative_to(allowed_dir)
+
+                # Check write permission if needed
+                if require_write and permission == "ro":
+                    raise PermissionError(
+                        f"Write access denied: {allowed_dir} is read-only"
+                    )
+
+                # Valid path within allowed directory
+                return requested
+
+            except ValueError:
+                # Not relative to this allowed_dir, try next
+                continue
+
+        # No allowed directory matched
+        raise PermissionError(
+            f"Access denied: {requested} is outside allowed directories"
+        )
